@@ -1,0 +1,113 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+uniform float elapsed_time;
+uniform float2 uv_offset;
+uniform float2 uv_scale;
+uniform float2 uv_pixel_interval;
+uniform float rand_f;
+uniform float2 uv_size;
+
+
+#define vec2 float2
+#define vec3 float3
+#define vec4 float4
+#define ivec2 int2
+#define ivec3 int3
+#define ivec4 int4
+#define mat2 float2x2
+#define mat3 float3x3
+#define mat4 float4x4
+#define fract frac
+#define mix lerp
+#define iResolution uv_size
+
+uniform float rotate_speed;
+uniform float size;
+uniform float zoom_speed;
+
+// ---------- Shader Code
+sampler_state def_sampler {
+	AddressU  = Wrap;
+	AddressV  = Wrap;
+	Filter    = Linear;
+};
+
+struct VertFragData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertFragData VSDefault(VertFragData v_in) {
+	v_in.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	return v_in;
+}
+mat2 rotation(float a){
+    float c=cos(a);
+	float s=sin(a);
+    return mat2(c,s,-s,c);
+}
+vec3 pal( in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d )
+{
+    return a + b*cos( 6.28318*(c*t+d) );
+}
+#define palette(x) pal(x,vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.33,0.67))
+#define iTime elapsed_time
+
+sampler_state textureSampler {
+	Filter    = Linear;
+	AddressU  = Border;
+	AddressV  = Border;
+	BorderColor = 00000000;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertData mainTransform(VertFragData v_in)
+{
+	v_in.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	return v_in;
+}
+
+float4 mainImage(VertData v_in) : TARGET
+{
+	vec2 uv = v_in.uv;
+	
+	uv = (uv-.5)*iResolution.xy/iResolution.y;
+	
+	float zoom = 1.0+ smoothstep(-1000.0,1000.0,size)*5.0;
+	float zoomspeed = (1+cos(smoothstep(-1000.0,1000.0,zoom_speed)*3.1416*iTime))+zoom;
+	uv*= zoomspeed;
+	
+	float _speed = .30*smoothstep(-1000.0,1000.0,rotate_speed)*2;
+
+	
+	
+    uv = mul(uv,rotation(iTime*_speed*3.1416/6.));
+	
+	vec2 id = floor(uv);
+	uv = fract(uv);
+   
+	float q = -1.;
+	if(id.y%2. == 0.){
+	   q = 1.;
+	}
+   	uv.x+=iTime*.1*q;
+	float4 smp = image.Sample(def_sampler, uv);
+    
+    smp.rgb *= palette(id.y/10+iTime*.1);
+	
+	return smp ;
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = mainTransform(v_in);
+		pixel_shader  = mainImage(v_in);
+	}
+}
